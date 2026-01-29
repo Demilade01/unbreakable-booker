@@ -2,6 +2,7 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { getAvailability } from './integrations/calComClient';
 
 dotenv.config();
 
@@ -20,6 +21,60 @@ app.get('/health', (_req: Request, res: Response) => {
     status: 'ok',
     service: 'unbreakable-booker-tool-backend',
   });
+});
+
+// Test endpoint to check Cal.com availability integration
+app.post('/test/cal/availability', async (req: Request, res: Response) => {
+  try {
+    const {
+      start,
+      end,
+      eventTypeId,
+      eventTypeSlug,
+      username,
+      organizationSlug,
+      teamSlug,
+      timeZone,
+      duration,
+      format,
+    } = req.body ?? {};
+
+    if (!start || !end) {
+      return res.status(400).json({
+        error: 'start and end are required (ISO strings in UTC).',
+      });
+    }
+
+    // Validate that at least one identifier method is provided
+    if (!eventTypeId && !(eventTypeSlug && (username || teamSlug))) {
+      return res.status(400).json({
+        error:
+          'Either eventTypeId OR (eventTypeSlug + username) OR (eventTypeSlug + teamSlug) must be provided.',
+      });
+    }
+
+    const availability = await getAvailability({
+      start,
+      end,
+      eventTypeId,
+      eventTypeSlug,
+      username,
+      organizationSlug,
+      teamSlug,
+      timeZone,
+      duration,
+      format,
+    });
+
+    return res.status(200).json(availability);
+  } catch (error: any) {
+    // eslint-disable-next-line no-console
+    console.error('Error fetching Cal.com availability', error?.response?.data || error);
+    return res.status(500).json({
+      error: 'Failed to fetch availability from Cal.com',
+      details: error?.response?.data ?? undefined,
+    });
+  }
 });
 
 // Fallback route (optional, for now just 404 JSON)
