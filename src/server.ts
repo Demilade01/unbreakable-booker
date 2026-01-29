@@ -2,8 +2,11 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 import { getAvailability } from './integrations/calComClient';
 import { sendSms } from './integrations/twilioClient';
+import { handleVapiServerMessage } from './handlers/vapiHandler';
+import { swaggerSpec } from './config/swagger';
 
 dotenv.config();
 
@@ -16,7 +19,35 @@ app.use(morgan('dev'));
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
-// Health check endpoint
+// Swagger UI
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get('/docs-json', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns the health status of the API service
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 service:
+ *                   type: string
+ *                   example: unbreakable-booker-tool-backend
+ */
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
@@ -24,7 +55,108 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// Test endpoint to check Cal.com availability integration
+/**
+ * @swagger
+ * /test/cal/availability:
+ *   post:
+ *     summary: Test Cal.com availability integration
+ *     description: Test endpoint to check available time slots from Cal.com for a given date range
+ *     tags: [Test]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - start
+ *               - end
+ *             properties:
+ *               start:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Start date/time in ISO 8601 format (UTC)
+ *                 example: "2026-02-01T00:00:00.000Z"
+ *               end:
+ *                 type: string
+ *                 format: date-time
+ *                 description: End date/time in ISO 8601 format (UTC)
+ *                 example: "2026-02-07T00:00:00.000Z"
+ *               eventTypeId:
+ *                 type: integer
+ *                 description: Cal.com event type ID
+ *                 example: 123
+ *               eventTypeSlug:
+ *                 type: string
+ *                 description: Event type slug (requires username)
+ *                 example: "30min"
+ *               username:
+ *                 type: string
+ *                 description: Cal.com username (required if using eventTypeSlug)
+ *                 example: "devbyte-9rm9zq"
+ *               organizationSlug:
+ *                 type: string
+ *                 description: Organization slug (optional)
+ *               teamSlug:
+ *                 type: string
+ *                 description: Team slug (for team event types)
+ *               timeZone:
+ *                 type: string
+ *                 description: Timezone for results
+ *                 example: "America/New_York"
+ *               duration:
+ *                 type: integer
+ *                 description: Duration in minutes
+ *                 example: 30
+ *               format:
+ *                 type: string
+ *                 enum: [time, range]
+ *                 description: Format of slot times
+ *                 example: "time"
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         start:
+ *                           type: string
+ *                           format: date-time
+ *       400:
+ *         description: Bad request - missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "start and end are required (ISO strings in UTC)."
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to fetch availability from Cal.com"
+ *                 details:
+ *                   type: object
+ */
 app.post('/test/cal/availability', async (req: Request, res: Response) => {
   try {
     const {
@@ -78,7 +210,69 @@ app.post('/test/cal/availability', async (req: Request, res: Response) => {
   }
 });
 
-// Test endpoint to send SMS via Twilio
+/**
+ * @swagger
+ * /test/sms:
+ *   post:
+ *     summary: Test Twilio SMS integration
+ *     description: Test endpoint to send an SMS message via Twilio
+ *     tags: [Test]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - to
+ *               - body
+ *             properties:
+ *               to:
+ *                 type: string
+ *                 description: Recipient phone number in E.164 format
+ *                 example: "+1234567890"
+ *               body:
+ *                 type: string
+ *                 description: SMS message content
+ *                 example: "Test SMS from Unbreakable Booker"
+ *     responses:
+ *       200:
+ *         description: SMS sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "SMS sent successfully"
+ *                 sid:
+ *                   type: string
+ *                   description: Twilio message SID
+ *                   example: "SMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ *       400:
+ *         description: Bad request - missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "`to` and `body` are required."
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to send SMS via Twilio"
+ *                 details:
+ *                   type: string
+ */
 app.post('/test/sms', async (req: Request, res: Response) => {
   try {
     const { to, body } = req.body ?? {};
@@ -104,6 +298,93 @@ app.post('/test/sms', async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * @swagger
+ * /vapi/webhook:
+ *   post:
+ *     summary: Vapi.ai webhook endpoint
+ *     description: Receives tool call requests from Vapi.ai during voice conversations. This endpoint handles tool-calls messages and routes them to appropriate handlers (check_availability, book_appointment, send_reminder).
+ *     tags: [Vapi]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               message:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     example: "tool-calls"
+ *                   toolCalls:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           example: "call_123"
+ *                         name:
+ *                           type: string
+ *                           example: "check_availability"
+ *                         parameters:
+ *                           type: object
+ *                           example:
+ *                             start: "2026-02-01T00:00:00.000Z"
+ *                             end: "2026-02-07T00:00:00.000Z"
+ *                             eventTypeSlug: "30min"
+ *                             username: "devbyte-9rm9zq"
+ *     responses:
+ *       200:
+ *         description: Tool call processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: object
+ *                   properties:
+ *                     toolCalls:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           result:
+ *                             type: object
+ *                           error:
+ *                             type: string
+ *       400:
+ *         description: Invalid message format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Invalid message format"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Internal server error"
+ *                 details:
+ *                   type: string
+ */
+app.post('/vapi/webhook', handleVapiServerMessage);
 
 // Fallback route (optional, for now just 404 JSON)
 app.use('*', (_req: Request, res: Response) => {

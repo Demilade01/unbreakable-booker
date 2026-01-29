@@ -1,0 +1,18 @@
+{
+  "message": {
+    "type": "tool-calls",
+    "toolCalls": [
+      {
+        "id": "test_call_123",
+        "name": "check_availability",
+        "parameters": {
+          "start": "2026-02-01T00:00:00.000Z",
+          "end": "2026-02-07T00:00:00.000Z",
+          "eventTypeSlug": "30min",
+          "username": "devbyte-9rm9zq",
+          "timeZone": "America/New_York"
+        }
+      }
+    ]
+  }
+}
