@@ -1,4 +1,4 @@
-{
+git 
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
@@ -9,7 +9,8 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": []
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
