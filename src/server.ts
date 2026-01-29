@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { getAvailability } from './integrations/calComClient';
+import { sendSms } from './integrations/twilioClient';
 
 dotenv.config();
 
@@ -73,6 +74,33 @@ app.post('/test/cal/availability', async (req: Request, res: Response) => {
     return res.status(500).json({
       error: 'Failed to fetch availability from Cal.com',
       details: error?.response?.data ?? undefined,
+    });
+  }
+});
+
+// Test endpoint to send SMS via Twilio
+app.post('/test/sms', async (req: Request, res: Response) => {
+  try {
+    const { to, body } = req.body ?? {};
+
+    if (!to || !body) {
+      return res.status(400).json({
+        error: '`to` and `body` are required.',
+      });
+    }
+
+    const result = await sendSms({ to, body });
+
+    return res.status(200).json({
+      message: 'SMS sent successfully',
+      sid: result.sid,
+    });
+  } catch (error: any) {
+    // eslint-disable-next-line no-console
+    console.error('Error sending SMS via Twilio', error);
+    return res.status(500).json({
+      error: 'Failed to send SMS via Twilio',
+      details: error?.message ?? String(error),
     });
   }
 });
