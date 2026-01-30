@@ -19,8 +19,8 @@ export interface VapiToolCall {
   id: string;
   name?: string;
   parameters?: Record<string, any>;
-  /** VAPI may send tool name as function (string or object with name) */
-  function?: string | { name?: string };
+  /** VAPI may send tool name as function (string or object with name and arguments) */
+  function?: string | { name?: string; arguments?: Record<string, any> | string };
   /** Some clients send arguments instead of parameters */
   arguments?: Record<string, any>;
 }

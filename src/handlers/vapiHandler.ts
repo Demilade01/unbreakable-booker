@@ -38,17 +38,17 @@ export async function handleVapiServerMessage(req: Request, res: Response): Prom
         const toolName =
           toolCall.name ??
           (typeof toolCall.function === 'string' ? toolCall.function : toolCall.function?.name);
-        
+
         // Parameters can be in multiple places depending on Vapi's format:
         // - toolCall.parameters (older format)
         // - toolCall.arguments (alternative)
         // - toolCall.function.arguments (OpenAI-style format used by Vapi)
-        let params = 
-          toolCall.parameters ?? 
-          toolCall.arguments ?? 
+        let params =
+          toolCall.parameters ??
+          toolCall.arguments ??
           (typeof toolCall.function === 'object' ? toolCall.function?.arguments : undefined) ??
           {};
-        
+
         if (typeof params === 'string') {
           try {
             params = JSON.parse(params) as Record<string, unknown>;
