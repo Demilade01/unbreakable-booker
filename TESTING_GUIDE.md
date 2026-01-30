@@ -182,6 +182,8 @@ curl -X POST http://localhost:3000/vapi/webhook \
 ```
 
 ### Test book_appointment:
+
+**Option A – by event type ID (recommended, use your Cal.com event type ID):**
 ```json
 {
   "message": {
@@ -190,16 +192,49 @@ curl -X POST http://localhost:3000/vapi/webhook \
       "id": "test_2",
       "name": "book_appointment",
       "parameters": {
-        "start": "2026-02-02T09:00:00.000Z",
-        "end": "2026-02-02T09:30:00.000Z",
-        "eventTypeId": 123,
-        "patientName": "John Doe",
+        "start": "2026-02-09T15:00:00.000Z",
+        "end": "2026-02-09T15:30:00.000Z",
+        "eventTypeId": 4567450,
+        "patientName": "Jane Doe",
         "patientPhone": "+1234567890",
-        "patientEmail": "john@example.com"
+        "patientEmail": "jane@example.com",
+        "timeZone": "America/New_York"
       }
     }]
   }
 }
+```
+
+**Option B – by slug + username (use exact slug/username from your Cal.com public booking URL):**
+```json
+{
+  "message": {
+    "type": "tool-calls",
+    "toolCalls": [{
+      "id": "test_2",
+      "name": "book_appointment",
+      "parameters": {
+        "start": "2026-02-09T15:00:00.000Z",
+        "end": "2026-02-09T15:30:00.000Z",
+        "eventTypeSlug": "30min",
+        "username": "devbyte-9rm9zq",
+        "patientName": "Jane Doe",
+        "patientPhone": "+1234567890",
+        "patientEmail": "jane@example.com",
+        "timeZone": "America/New_York"
+      }
+    }]
+  }
+}
+```
+
+Note: Cal.com uses the event type's default duration; do not send `lengthInMinutes` unless the event type has multiple possible lengths.
+
+**Using the test file:**
+```bash
+curl -X POST http://localhost:3000/vapi/webhook \
+  -H "Content-Type: application/json" \
+  -d @test-vapi-webhook-book-appointment.json
 ```
 
 ### Test send_reminder:

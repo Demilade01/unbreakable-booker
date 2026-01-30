@@ -34,8 +34,37 @@ export async function handleVapiServerMessage(req: Request, res: Response): Prom
 
       // Process each tool call
       for (const toolCall of toolCalls) {
+        // VAPI may send tool name as "name" or as "function" (object with name or string)
+        const toolName =
+          toolCall.name ??
+          (typeof toolCall.function === 'string' ? toolCall.function : toolCall.function?.name);
+        
+        // Parameters can be in multiple places depending on Vapi's format:
+        // - toolCall.parameters (older format)
+        // - toolCall.arguments (alternative)
+        // - toolCall.function.arguments (OpenAI-style format used by Vapi)
+        let params = 
+          toolCall.parameters ?? 
+          toolCall.arguments ?? 
+          (typeof toolCall.function === 'object' ? toolCall.function?.arguments : undefined) ??
+          {};
+        
+        if (typeof params === 'string') {
+          try {
+            params = JSON.parse(params) as Record<string, unknown>;
+          } catch {
+            params = {};
+          }
+        }
+        if (!toolName || typeof toolName !== 'string') {
+          toolResults.push({
+            id: toolCall.id,
+            error: `Missing or invalid tool name in request. Received: ${JSON.stringify(toolCall)}`,
+          });
+          continue;
+        }
         try {
-          const result = await executeToolCall(toolCall.name, toolCall.parameters);
+          const result = await executeToolCall(toolName, params);
           toolResults.push({
             id: toolCall.id,
             result,
@@ -43,7 +72,7 @@ export async function handleVapiServerMessage(req: Request, res: Response): Prom
         } catch (error: any) {
           // Log error but still respond to Vapi
           // eslint-disable-next-line no-console
-          console.error(`Error executing tool ${toolCall.name}:`, error);
+          console.error(`Error executing tool ${toolName}:`, error);
           toolResults.push({
             id: toolCall.id,
             error: error?.message || String(error),
