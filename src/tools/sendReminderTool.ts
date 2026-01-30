@@ -17,16 +17,31 @@ export interface SendReminderResult {
 export async function sendReminderTool(
   params: SendReminderToolParams,
 ): Promise<SendReminderResult> {
-  if (!params.patientPhone) {
-    throw new Error('patientPhone is required');
+  // Normalize param names (VAPI or other clients may send phone, phoneNumber, date, etc.)
+  const raw = params as unknown as Record<string, unknown>;
+  const patientPhone =
+    params.patientPhone ?? raw.phone ?? raw.phoneNumber ?? raw.patientPhone;
+  const appointmentTime =
+    params.appointmentTime ?? raw.appointmentTime ?? raw.date ?? raw.time ?? raw.start;
+
+  if (!patientPhone) {
+    throw new Error(
+      'patientPhone is required (E.164 format, e.g. +1234567890). Also accepted: phone, phoneNumber.',
+    );
   }
 
-  if (!params.appointmentTime) {
-    throw new Error('appointmentTime is required');
+  if (!appointmentTime) {
+    throw new Error(
+      'appointmentTime is required (ISO 8601, e.g. 2026-02-09T15:00:00.000Z). Also accepted: date, time, start.',
+    );
   }
+
+  const timeZone = (params.timeZone ?? raw.timeZone) as string | undefined;
+  const patientName = (params.patientName ?? raw.patientName) as string | undefined;
+  const customMessage = (params.customMessage ?? raw.customMessage) as string | undefined;
 
   // Format appointment time
-  const appointmentDate = new Date(params.appointmentTime);
+  const appointmentDate = new Date(String(appointmentTime));
   const formattedDate = appointmentDate.toLocaleString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -34,21 +49,21 @@ export async function sendReminderTool(
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    timeZone: params.timeZone || 'America/New_York',
+    timeZone: timeZone || 'America/New_York',
   });
 
   // Build SMS message
   let smsBody: string;
-  if (params.customMessage) {
-    smsBody = params.customMessage.replace('{date}', formattedDate);
+  if (customMessage) {
+    smsBody = customMessage.replace('{date}', formattedDate);
   } else {
-    const greeting = params.patientName ? `Hi ${params.patientName}, ` : '';
+    const greeting = patientName ? `Hi ${patientName}, ` : '';
     smsBody = `${greeting}This is a reminder that you have a dental appointment on ${formattedDate}. We look forward to seeing you!`;
   }
 
   // Send SMS
   const result = await sendSms({
-    to: params.patientPhone,
+    to: String(patientPhone),
     body: smsBody,
   });
 

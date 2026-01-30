@@ -55,6 +55,48 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+// Chat page: Vapi widget in chat mode (text booking)
+const publicKey = process.env.VAPI_PUBLIC_KEY || '';
+const assistantId = process.env.VAPI_ASSISTANT_ID || '';
+app.get('/chat', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (!publicKey || !assistantId) {
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html><head><meta charset="utf-8"><title>Chat</title></head>
+      <body style="font-family:sans-serif;padding:2rem;">
+        <h1>Chat not configured</h1>
+        <p>Set VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID in your environment, then restart the server.</p>
+      </body></html>
+    `);
+    return;
+  }
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book with us – Chat</title>
+</head>
+<body>
+  <div style="max-width:600px;margin:2rem auto;font-family:sans-serif;">
+    <h1>Book an appointment</h1>
+    <p>Use the chat button below to check availability, book, or get a reminder.</p>
+  </div>
+  <script src="https://unpkg.com/@vapi-ai/client-sdk-react/dist/embed/widget.umd.js" async type="text/javascript"></script>
+  <vapi-widget
+    public-key="${publicKey.replace(/"/g, '&quot;')}"
+    assistant-id="${assistantId.replace(/"/g, '&quot;')}"
+    mode="chat"
+    theme="light"
+    size="full"
+  ></vapi-widget>
+</body>
+</html>
+  `);
+});
+
 /**
  * @swagger
  * /test/cal/availability:

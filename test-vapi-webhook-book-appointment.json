@@ -1,0 +1,20 @@
+{
+  "message": {
+    "type": "tool-calls",
+    "toolCalls": [
+      {
+        "id": "test_2",
+        "name": "book_appointment",
+        "parameters": {
+          "start": "2026-02-09T15:00:00.000Z",
+          "end": "2026-02-09T15:30:00.000Z",
+          "eventTypeId": 4567450,
+          "patientName": "Jane Doe",
+          "patientPhone": "+1234567890",
+          "patientEmail": "jane@example.com",
+          "timeZone": "America/New_York"
+        }
+      }
+    ]
+  }
+}
