@@ -2,6 +2,8 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import axios from 'axios';
+import cron from 'node-cron';
 import swaggerUi from 'swagger-ui-express';
 import { getAvailability } from './integrations/calComClient';
 import { sendSms } from './integrations/twilioClient';
@@ -58,6 +60,23 @@ app.get('/health', (_req: Request, res: Response) => {
 // Chat page: Vapi widget in chat mode (text booking)
 const publicKey = process.env.VAPI_PUBLIC_KEY || '';
 const assistantId = process.env.VAPI_ASSISTANT_ID || '';
+
+/**
+ * @swagger
+ * /chat:
+ *   get:
+ *     summary: Chat booking interface
+ *     description: Returns an HTML page with an embedded Vapi.ai chat widget for users to book appointments via text chat. Requires VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID environment variables to be configured.
+ *     tags: [Chat]
+ *     responses:
+ *       200:
+ *         description: Chat interface page loaded successfully
+ *         content:
+ *           text/html:
+ *             schema:
+ *               type: string
+ *               example: "<html>...</html>"
+ */
 app.get('/chat', (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   if (!publicKey || !assistantId) {
@@ -431,6 +450,22 @@ app.post('/vapi/webhook', handleVapiServerMessage);
 // Fallback route (optional, for now just 404 JSON)
 app.use('*', (_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not Found' });
+});
+
+// Keep-alive task to prevent Render spin-down
+// Runs every 10 minutes and pings the health endpoint
+const keepAliveInterval = 10; // minutes
+cron.schedule(`*/${keepAliveInterval} * * * *`, async () => {
+  try {
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const baseUrl = process.env.RENDER_EXTERNAL_URL || `${protocol}://localhost:${PORT}`;
+    await axios.get(`${baseUrl}/health`);
+    // eslint-disable-next-line no-console
+    console.log('[Keep-Alive] Health check ping successful');
+  } catch (error: any) {
+    // eslint-disable-next-line no-console
+    console.error('[Keep-Alive] Health check ping failed:', error?.message);
+  }
 });
 
 app.listen(PORT, () => {
