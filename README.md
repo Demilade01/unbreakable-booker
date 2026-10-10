@@ -1,251 +1,142 @@
-# The Unbreakable Booker - Tool Backend
+# The Unbreakable Booker — Voice AI Receptionist (Tool Backend)
 
-A Node.js/Express TypeScript backend that serves as the **Tool Backend** for [Vapi.ai](https://vapi.ai), powering a Voice AI Receptionist for dental offices. This backend handles appointment scheduling via Cal.com and SMS notifications via Twilio.
+A production Node.js/Express + TypeScript backend that powers a **Voice AI Receptionist** for a dental office, built on [Vapi.ai](https://vapi.ai). It receives tool calls from Vapi during live **voice** (or **text-chat**) conversations and executes real actions — checking open slots, booking appointments, and sending SMS confirmations/reminders — backed by **Cal.com** scheduling and **Twilio** SMS.
 
-## Overview
+> A patient calls or chats. The AI assistant checks real Cal.com availability, books the appointment, and texts a confirmation — end to end, no human needed.
 
-**The Unbreakable Booker** is a portfolio project demonstrating a Voice AI Receptionist system. When patients call, the AI assistant can:
-- Check available appointment slots
-- Book new appointments
-- Send SMS confirmations and reminders
+## What it does
 
-This backend acts as the integration layer between Vapi.ai's voice assistant and external services (Cal.com for scheduling, Twilio for SMS).
+When Vapi's assistant needs to act mid-conversation, it calls `POST /vapi/webhook`, which routes to one of three tools:
 
-## Tech Stack
+- **check_availability** — returns real open slots from Cal.com for a date range
+- **book_appointment** — creates a Cal.com booking and (optionally) texts an SMS confirmation
+- **send_reminder** — sends an SMS appointment reminder via Twilio
+
+It also handles Vapi `assistant-request` events and serves a `/chat` page with an embedded Vapi widget for **text-based** booking.
+
+## Tech stack
 
 - **Runtime:** Node.js
 - **Framework:** Express.js
 - **Language:** TypeScript
-- **Voice Platform:** Vapi.ai (Server-Server communication)
+- **Voice platform:** Vapi.ai (server-to-server tool calls)
 - **Scheduling:** Cal.com API v2
-- **SMS:** Twilio API
-- **Development:** ts-node-dev, TypeScript
+- **SMS:** Twilio
+- **API docs:** Swagger / OpenAPI (swagger-ui-express)
+- **Keep-alive:** node-cron
+- **Deploy target:** Render
 
 ## Features
 
-### Current Implementation
+### Voice/chat tool backend (implemented)
 
-- ✅ **Cal.com Integration**
-  - Check available time slots for event types
-  - Support for event type ID, slug + username, or team-based queries
-  - Flexible date range queries with timezone support
+- ✅ `POST /vapi/webhook` — handles both `tool-calls` and `assistant-request` messages
+- ✅ Tool router with resilient parameter normalization (accepts the many param-name variants an LLM emits — `start`/`startTime`/`startDateTime`/`date`, etc.)
+- ✅ **check_availability** — Cal.com slot lookup by `eventTypeId` or `eventTypeSlug` + username/team, timezone-aware, defaults a 7-day window
+- ✅ **book_appointment** — Cal.com v2 booking + automatic SMS confirmation
+- ✅ **send_reminder** — Twilio SMS reminder with a human-formatted date/time
+- ✅ Per-tool error isolation — each call returns a result or an error without crashing the conversation turn
+- ✅ SMS failures never fail a booking (logged; the booking still succeeds)
 
-- ✅ **Twilio SMS Integration**
-  - Send SMS notifications
-  - Confirmation messages for appointments
-  - Reminder messages
+### Supporting
 
-- ✅ **Test Endpoints**
-  - `/test/cal/availability` - Test Cal.com availability queries
-  - `/test/sms` - Test SMS sending
+- ✅ `/chat` — embedded Vapi widget page for text booking (gated on env config)
+- ✅ `/docs` + `/docs-json` — Swagger UI and raw OpenAPI spec
+- ✅ `/health` — health check
+- ✅ `/test/cal/availability`, `/test/sms` — isolated integration test endpoints
+- ✅ Keep-alive cron (every 10 min) to prevent Render free-tier spin-down
 
-### Planned Features (In Progress)
-
-- 🔄 **Vapi Webhook Handler**
-  - Handle incoming tool calls from Vapi.ai
-  - Route tool calls to appropriate handlers
-
-- 🔄 **Tool Handlers**
-  - `checkAvailabilityTool` - Check available slots
-  - `bookAppointmentTool` - Create bookings and send confirmations
-  - `sendReminderTool` - Send SMS reminders
-
-## Project Structure
+## Project structure
 
 ```
 unbreakable-booker/
 ├── src/
 │   ├── integrations/
-│   │   ├── calComClient.ts    # Cal.com API client
-│   │   └── twilioClient.ts     # Twilio SMS client
-│   └── server.ts               # Express server & routes
-├── .env.example                # Environment variables template
-├── .gitignore
+│   │   ├── calComClient.ts      # Cal.com API v2 client (availability + bookings)
+│   │   └── twilioClient.ts      # Twilio SMS client
+│   ├── tools/
+│   │   ├── checkAvailabilityTool.ts
+│   │   ├── bookAppointmentTool.ts
+│   │   └── sendReminderTool.ts
+│   ├── handlers/
+│   │   └── vapiHandler.ts       # Routes Vapi tool-calls to the tools
+│   ├── types/
+│   │   └── vapi.ts              # Vapi message/response types
+│   ├── config/
+│   │   └── swagger.ts           # OpenAPI spec config
+│   └── server.ts                # Express app, routes, cron, Swagger
+├── .env.example
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
-## Getting Started
+## API endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/vapi/webhook` | Vapi `tool-calls` + `assistant-request` handler (core) |
+| GET | `/chat` | Embedded Vapi widget (text booking) |
+| GET | `/docs`, `/docs-json` | Swagger UI / OpenAPI JSON |
+| GET | `/health` | Health check |
+| POST | `/test/cal/availability` | Test Cal.com availability directly |
+| POST | `/test/sms` | Test Twilio SMS directly |
+
+### The three Vapi tools
+
+Tool names are accepted in snake_case or camelCase (`check_availability` / `checkAvailability`, etc.).
+
+- **check_availability** — `{ start, end, eventTypeId? | (eventTypeSlug? + username?), timeZone?, duration? }` → open slots + a count message.
+- **book_appointment** — `{ start, end? | duration?, patientName, patientPhone, patientEmail, eventTypeId? | (eventTypeSlug? + username?/teamSlug?), notes?, timeZone?, sendSmsConfirmation? }` → Cal.com booking + SMS confirmation.
+- **send_reminder** — `{ patientPhone, appointmentTime, patientName?, customMessage?, timeZone? }` → Twilio SMS reminder.
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js (v18 or higher recommended)
-- npm or yarn
-- Cal.com account with API key
-- Twilio account with credentials
+- Node.js 18+
+- Cal.com account + API key
+- Twilio account (SID, auth token, from number)
+- Vapi.ai assistant configured to call this backend's `/vapi/webhook`
 
-### Installation
+### Install & run
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd unbreakable-booker
-   ```
+```bash
+npm install
+cp .env.example .env   # fill in credentials
+npm run dev            # http://localhost:3000
+```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-
-   Edit `.env` and add your credentials:
-   ```env
-   PORT=3000
-
-   # Cal.com
-   CALCOM_BASE_URL=https://api.cal.com/v2
-   CALCOM_API_KEY=your-calcom-api-key-here
-
-   # Twilio
-   TWILIO_ACCOUNT_SID=your-twilio-account-sid-here
-   TWILIO_AUTH_TOKEN=your-twilio-auth-token-here
-   TWILIO_FROM_NUMBER=+10000000000
-   ```
-
-4. **Run the development server**
-   ```bash
-   npm run dev
-   ```
-
-   The server will start on `http://localhost:3000`
-
-### Building for Production
+### Build for production
 
 ```bash
 npm run build
 npm start
 ```
 
-## API Endpoints
-
-### Health Check
-
-**GET** `/health`
-
-Returns server status.
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "service": "unbreakable-booker-tool-backend"
-}
-```
-
-### Test Cal.com Availability
-
-**POST** `/test/cal/availability`
-
-Test the Cal.com availability integration.
-
-**Request Body:**
-```json
-{
-  "start": "2026-02-01T00:00:00.000Z",
-  "end": "2026-02-07T00:00:00.000Z",
-  "eventTypeSlug": "30min",
-  "username": "your-calcom-username",
-  "timeZone": "America/New_York"
-}
-```
-
-**Query Options:**
-- By `eventTypeId`: `{ "eventTypeId": 123, "start": "...", "end": "..." }`
-- By `eventTypeSlug` + `username`: `{ "eventTypeSlug": "30min", "username": "user", "start": "...", "end": "..." }`
-- By `eventTypeSlug` + `teamSlug`: `{ "eventTypeSlug": "team-event", "teamSlug": "team", "start": "...", "end": "..." }`
-
-**Optional Parameters:**
-- `timeZone`: Timezone for results (default: UTC)
-- `duration`: Duration in minutes
-- `format`: `"time"` or `"range"` (default: `"time"`)
-- `organizationSlug`: For org-scoped queries
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "2026-02-02": [
-      { "start": "2026-02-02T09:00:00.000-05:00" },
-      { "start": "2026-02-02T09:30:00.000-05:00" }
-    ]
-  }
-}
-```
-
-### Test SMS Sending
-
-**POST** `/test/sms`
-
-Test the Twilio SMS integration.
-
-**Request Body:**
-```json
-{
-  "to": "+1234567890",
-  "body": "Test SMS from Unbreakable Booker"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "SMS sent successfully",
-  "sid": "SMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-}
-```
-
-## Environment Variables
+## Environment variables
 
 | Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Server port | No (default: 3000) |
-| `CALCOM_BASE_URL` | Cal.com API base URL | No (default: https://api.cal.com/v2) |
-| `CALCOM_API_KEY` | Cal.com API key | Yes |
-| `TWILIO_ACCOUNT_SID` | Twilio Account SID | Yes |
-| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | Yes |
-| `TWILIO_FROM_NUMBER` | Twilio phone number (E.164 format) | Yes |
+|---|---|---|
+| `PORT` | Server port (default 3000) | No |
+| `CALCOM_BASE_URL` | Cal.com API base (default `https://api.cal.com/v2`) | No |
+| `CALCOM_API_KEY` | Cal.com API key | ✅ Yes |
+| `CALCOM_USERNAME` | Default Cal.com username | No (has default) |
+| `CALCOM_EVENT_TYPE_SLUG` | Default event type slug (e.g. `30min`) | No (has default) |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID | ✅ Yes |
+| `TWILIO_AUTH_TOKEN` | Twilio Auth Token | ✅ Yes |
+| `TWILIO_FROM_NUMBER` | Twilio phone number (E.164) | ✅ Yes |
+| `VAPI_PUBLIC_KEY` | Vapi public key (for the `/chat` widget) | For `/chat` |
+| `VAPI_ASSISTANT_ID` | Vapi assistant id | For `/chat` + `assistant-request` |
+| `RENDER_EXTERNAL_URL` | Public URL used by the keep-alive ping | No |
+| `NODE_ENV` | `production` makes the keep-alive ping use https | No |
 
-## Development
+## How it connects to Vapi
 
-### Scripts
-
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm start` - Run production build
-
-### Code Structure
-
-- **Integrations** (`src/integrations/`): External service clients (Cal.com, Twilio)
-- **Server** (`src/server.ts`): Express app, routes, and middleware
-- **Tools** (planned): Vapi tool handlers for voice interactions
-
-## Integration with Vapi.ai
-
-This backend is designed to be used as a **Tool Backend** for Vapi.ai. When configured:
-
-1. Vapi.ai sends tool call requests to `POST /vapi/webhook`
-2. Backend routes tool calls to appropriate handlers
-3. Handlers execute actions (check availability, book appointments, send SMS)
-4. Results are returned to Vapi.ai for voice response
-
-**Note:** Vapi webhook integration is currently in development.
-
-## Contributing
-
-This is a portfolio project. Contributions and suggestions are welcome!
+1. In your Vapi assistant, define the three tools (`check_availability`, `book_appointment`, `send_reminder`) with their server URL pointing at `https://<your-host>/vapi/webhook`.
+2. During a call or chat, Vapi sends `tool-calls` to the webhook.
+3. `vapiHandler` routes each call to the matching tool, executes it against Cal.com / Twilio, and returns the result for the assistant to speak back to the caller.
 
 ## License
 
 MIT
-
-## Acknowledgments
-
-- [Vapi.ai](https://vapi.ai) - Voice AI platform
-- [Cal.com](https://cal.com) - Scheduling infrastructure
-- [Twilio](https://www.twilio.com) - SMS messaging
